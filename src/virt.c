@@ -69,9 +69,10 @@
 #endif
 
 /*
-  virConnectListAllDomains() appeared in 0.10.2
-  Note that LIBVIR_CHECK_VERSION appeared a year later, so
-  in some systems which actually have virConnectListAllDomains()
+  virConnectListAllDomains() appeared in 0.10.2 (Sep 2012)
+  Note that LIBVIR_CHECK_VERSION appeared a year later (Dec 2013,
+  libvirt-1.2.0),
+  so in some systems which actually have virConnectListAllDomains()
   we can't detect this.
  */
 #if LIBVIR_CHECK_VERSION(0, 10, 2)
@@ -107,6 +108,9 @@
 #define HAVE_DOM_REASON_POSTCOPY 1
 #endif
 
+#if LIBVIR_CHECK_VERSION(4, 10, 0)
+#define HAVE_DOM_REASON_SHUTOFF_DAEMON 1
+#endif
 #endif /* LIBVIR_CHECK_VERSION */
 
 /* structure used for aggregating notification-thread data*/
@@ -127,16 +131,16 @@ static bool report_network_interfaces = true;
 static virt_notif_thread_t notif_thread;
 
 const char *domain_states[] = {
-        [VIR_DOMAIN_NOSTATE] = "no state",
-        [VIR_DOMAIN_RUNNING] = "the domain is running",
-        [VIR_DOMAIN_BLOCKED] = "the domain is blocked on resource",
-        [VIR_DOMAIN_PAUSED] = "the domain is paused by user",
-        [VIR_DOMAIN_SHUTDOWN] = "the domain is being shut down",
-        [VIR_DOMAIN_SHUTOFF] = "the domain is shut off",
-        [VIR_DOMAIN_CRASHED] = "the domain is crashed",
+    [VIR_DOMAIN_NOSTATE] = "no state",
+    [VIR_DOMAIN_RUNNING] = "the domain is running",
+    [VIR_DOMAIN_BLOCKED] = "the domain is blocked on resource",
+    [VIR_DOMAIN_PAUSED] = "the domain is paused by user",
+    [VIR_DOMAIN_SHUTDOWN] = "the domain is being shut down",
+    [VIR_DOMAIN_SHUTOFF] = "the domain is shut off",
+    [VIR_DOMAIN_CRASHED] = "the domain is crashed",
 #ifdef HAVE_DOM_STATE_PMSUSPENDED
-        [VIR_DOMAIN_PMSUSPENDED] =
-            "the domain is suspended by guest power management",
+    [VIR_DOMAIN_PMSUSPENDED] =
+        "the domain is suspended by guest power management",
 #endif
 };
 
@@ -300,6 +304,16 @@ static int map_domain_event_detail_to_reason(int event, int detail) {
     switch (detail) {
     case VIR_DOMAIN_EVENT_SHUTDOWN_FINISHED: /* Guest finished shutdown
                                                 sequence */
+#ifdef LIBVIR_CHECK_VERSION
+#if LIBVIR_CHECK_VERSION(3, 4, 0)
+    case VIR_DOMAIN_EVENT_SHUTDOWN_GUEST: /* Domain finished shutting down after
+                                             request from the guest itself (e.g.
+                                             hardware-specific action) */
+    case VIR_DOMAIN_EVENT_SHUTDOWN_HOST:  /* Domain finished shutting down after
+                                             request from the host (e.g. killed
+                                             by a signal) */
+#endif
+#endif
       ret = VIR_DOMAIN_SHUTDOWN_USER;
       break;
     default:
@@ -338,103 +352,99 @@ static int map_domain_event_detail_to_reason(int event, int detail) {
 
 #define DOMAIN_STATE_REASON_MAX_SIZE 20
 const char *domain_reasons[][DOMAIN_STATE_REASON_MAX_SIZE] = {
-        [VIR_DOMAIN_NOSTATE][VIR_DOMAIN_NOSTATE_UNKNOWN] =
-            "the reason is unknown",
+    [VIR_DOMAIN_NOSTATE][VIR_DOMAIN_NOSTATE_UNKNOWN] = "the reason is unknown",
 
-        [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_UNKNOWN] =
-            "the reason is unknown",
-        [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_BOOTED] =
-            "normal startup from boot",
-        [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_MIGRATED] =
-            "migrated from another host",
-        [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_RESTORED] =
-            "restored from a state file",
-        [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_FROM_SNAPSHOT] =
-            "restored from snapshot",
-        [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_UNPAUSED] =
-            "returned from paused state",
-        [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_MIGRATION_CANCELED] =
-            "returned from migration",
-        [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_SAVE_CANCELED] =
-            "returned from failed save process",
+    [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_UNKNOWN] = "the reason is unknown",
+    [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_BOOTED] =
+        "normal startup from boot",
+    [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_MIGRATED] =
+        "migrated from another host",
+    [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_RESTORED] =
+        "restored from a state file",
+    [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_FROM_SNAPSHOT] =
+        "restored from snapshot",
+    [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_UNPAUSED] =
+        "returned from paused state",
+    [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_MIGRATION_CANCELED] =
+        "returned from migration",
+    [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_SAVE_CANCELED] =
+        "returned from failed save process",
 #ifdef HAVE_DOM_REASON_RUNNING_WAKEUP
-        [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_WAKEUP] =
-            "returned from pmsuspended due to wakeup event",
+    [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_WAKEUP] =
+        "returned from pmsuspended due to wakeup event",
 #endif
 #ifdef HAVE_DOM_REASON_CRASHED
-        [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_CRASHED] =
-            "resumed from crashed",
+    [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_CRASHED] = "resumed from crashed",
 #endif
 #ifdef HAVE_DOM_REASON_POSTCOPY
-        [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_POSTCOPY] =
-            "running in post-copy migration mode",
+    [VIR_DOMAIN_RUNNING][VIR_DOMAIN_RUNNING_POSTCOPY] =
+        "running in post-copy migration mode",
 #endif
-        [VIR_DOMAIN_BLOCKED][VIR_DOMAIN_BLOCKED_UNKNOWN] =
-            "the reason is unknown",
+    [VIR_DOMAIN_BLOCKED][VIR_DOMAIN_BLOCKED_UNKNOWN] = "the reason is unknown",
 
-        [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_UNKNOWN] =
-            "the reason is unknown",
-        [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_USER] = "paused on user request",
-        [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_MIGRATION] =
-            "paused for offline migration",
-        [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_SAVE] = "paused for save",
-        [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_DUMP] =
-            "paused for offline core dump",
-        [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_IOERROR] =
-            "paused due to a disk I/O error",
-        [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_WATCHDOG] =
-            "paused due to a watchdog event",
-        [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_FROM_SNAPSHOT] =
-            "paused after restoring from snapshot",
+    [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_UNKNOWN] = "the reason is unknown",
+    [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_USER] = "paused on user request",
+    [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_MIGRATION] =
+        "paused for offline migration",
+    [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_SAVE] = "paused for save",
+    [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_DUMP] =
+        "paused for offline core dump",
+    [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_IOERROR] =
+        "paused due to a disk I/O error",
+    [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_WATCHDOG] =
+        "paused due to a watchdog event",
+    [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_FROM_SNAPSHOT] =
+        "paused after restoring from snapshot",
 #ifdef HAVE_DOM_REASON_PAUSED_SHUTTING_DOWN
-        [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_SHUTTING_DOWN] =
-            "paused during shutdown process",
+    [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_SHUTTING_DOWN] =
+        "paused during shutdown process",
 #endif
 #ifdef HAVE_DOM_REASON_PAUSED_SNAPSHOT
-        [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_SNAPSHOT] =
-            "paused while creating a snapshot",
+    [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_SNAPSHOT] =
+        "paused while creating a snapshot",
 #endif
 #ifdef HAVE_DOM_REASON_PAUSED_CRASHED
-        [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_CRASHED] =
-            "paused due to a guest crash",
+    [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_CRASHED] =
+        "paused due to a guest crash",
 #endif
 #ifdef HAVE_DOM_REASON_PAUSED_STARTING_UP
-        [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_STARTING_UP] =
-            "the domain is being started",
+    [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_STARTING_UP] =
+        "the domain is being started",
 #endif
 #ifdef HAVE_DOM_REASON_POSTCOPY
-        [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_POSTCOPY] =
-            "paused for post-copy migration",
-        [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_POSTCOPY_FAILED] =
-            "paused after failed post-copy",
+    [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_POSTCOPY] =
+        "paused for post-copy migration",
+    [VIR_DOMAIN_PAUSED][VIR_DOMAIN_PAUSED_POSTCOPY_FAILED] =
+        "paused after failed post-copy",
 #endif
-        [VIR_DOMAIN_SHUTDOWN][VIR_DOMAIN_SHUTDOWN_UNKNOWN] =
-            "the reason is unknown",
-        [VIR_DOMAIN_SHUTDOWN][VIR_DOMAIN_SHUTDOWN_USER] =
-            "shutting down on user request",
+    [VIR_DOMAIN_SHUTDOWN][VIR_DOMAIN_SHUTDOWN_UNKNOWN] =
+        "the reason is unknown",
+    [VIR_DOMAIN_SHUTDOWN][VIR_DOMAIN_SHUTDOWN_USER] =
+        "shutting down on user request",
 
-        [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_UNKNOWN] =
-            "the reason is unknown",
-        [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_SHUTDOWN] = "normal shutdown",
-        [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_DESTROYED] = "forced poweroff",
-        [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_CRASHED] = "domain crashed",
-        [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_MIGRATED] =
-            "migrated to another host",
-        [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_SAVED] = "saved to a file",
-        [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_FAILED] =
-            "domain failed to start",
-        [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_FROM_SNAPSHOT] =
-            "restored from a snapshot which was taken while domain was shutoff",
+    [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_UNKNOWN] = "the reason is unknown",
+    [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_SHUTDOWN] = "normal shutdown",
+    [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_DESTROYED] = "forced poweroff",
+    [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_CRASHED] = "domain crashed",
+    [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_MIGRATED] =
+        "migrated to another host",
+    [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_SAVED] = "saved to a file",
+    [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_FAILED] = "domain failed to start",
+    [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_FROM_SNAPSHOT] =
+        "restored from a snapshot which was taken while domain was shutoff",
+#ifdef HAVE_DOM_REASON_SHUTOFF_DAEMON
+    [VIR_DOMAIN_SHUTOFF][VIR_DOMAIN_SHUTOFF_DAEMON] =
+        "daemon decides to kill domain during reconnection processing",
+#endif
 
-        [VIR_DOMAIN_CRASHED][VIR_DOMAIN_CRASHED_UNKNOWN] =
-            "the reason is unknown",
+    [VIR_DOMAIN_CRASHED][VIR_DOMAIN_CRASHED_UNKNOWN] = "the reason is unknown",
 #ifdef VIR_DOMAIN_CRASHED_PANICKED
-        [VIR_DOMAIN_CRASHED][VIR_DOMAIN_CRASHED_PANICKED] = "domain panicked",
+    [VIR_DOMAIN_CRASHED][VIR_DOMAIN_CRASHED_PANICKED] = "domain panicked",
 #endif
 
 #ifdef HAVE_DOM_STATE_PMSUSPENDED
-        [VIR_DOMAIN_PMSUSPENDED][VIR_DOMAIN_PMSUSPENDED_UNKNOWN] =
-            "the reason is unknown",
+    [VIR_DOMAIN_PMSUSPENDED][VIR_DOMAIN_PMSUSPENDED_UNKNOWN] =
+        "the reason is unknown",
 #endif
 };
 #endif /* HAVE_DOM_REASON */
@@ -592,7 +602,9 @@ enum ex_stats {
 #endif
   ex_stats_disk_allocation = 1 << 10,
   ex_stats_disk_capacity = 1 << 11,
-  ex_stats_disk_physical = 1 << 12
+  ex_stats_disk_physical = 1 << 12,
+  ex_stats_memory = 1 << 13,
+  ex_stats_vcpu = 1 << 14
 };
 
 static unsigned int extra_stats = ex_stats_none;
@@ -623,6 +635,8 @@ static const struct ex_stats_item ex_stats_table[] = {
     {"disk_allocation", ex_stats_disk_allocation},
     {"disk_capacity", ex_stats_disk_capacity},
     {"disk_physical", ex_stats_disk_physical},
+    {"memory", ex_stats_memory},
+    {"vcpu", ex_stats_vcpu},
     {NULL, ex_stats_none},
 };
 
@@ -635,6 +649,8 @@ static enum if_field interface_format = if_name;
 static time_t last_refresh = (time_t)0;
 
 static int refresh_lists(struct lv_read_instance *inst);
+static int register_event_impl(void);
+static int start_event_loop(virt_notif_thread_t *thread_data);
 
 struct lv_block_stats {
   virDomainBlockStatsStruct bi;
@@ -708,7 +724,10 @@ static int get_block_stats(struct lv_block_stats *bstats,
       ERROR(PLUGIN_NAME " plugin: %s failed: %s", (s), err->message);          \
   } while (0)
 
-static char *metadata_get_hostname(virDomainPtr dom) {
+enum metadata_set_type_e { META_APPEND_HOST, META_APPEND_PLUGIN_INSTANCE };
+
+static void set_field_from_metadata(value_list_t *vl, virDomainPtr dom,
+                                    enum metadata_set_type_e field) {
   const char *xpath_str = NULL;
   if (hm_xpath == NULL)
     xpath_str = "/instance/name/text()";
@@ -718,17 +737,18 @@ static char *metadata_get_hostname(virDomainPtr dom) {
   const char *namespace = NULL;
   if (hm_ns == NULL) {
     namespace = "http://openstack.org/xmlns/libvirt/nova/1.0";
-  } else {
+  } // namespace =hm_ns;
+  else {
     namespace = hm_ns;
   }
 
   char *metadata_str = virDomainGetMetadata(
       dom, VIR_DOMAIN_METADATA_ELEMENT, namespace, VIR_DOMAIN_AFFECT_CURRENT);
   if (metadata_str == NULL) {
-    return NULL;
+    return;
   }
 
-  char *hostname = NULL;
+  const char *value = NULL;
   xmlXPathContextPtr xpath_ctx = NULL;
   xmlXPathObjectPtr xpath_obj = NULL;
   xmlNodePtr xml_node = NULL;
@@ -772,18 +792,25 @@ static char *metadata_get_hostname(virDomainPtr dom) {
 
   xml_node = xpath_obj->nodesetval->nodeTab[0];
   if (xml_node->type == XML_TEXT_NODE) {
-    hostname = strdup((const char *)xml_node->content);
+    value = (const char *)xml_node->content;
   } else if (xml_node->type == XML_ATTRIBUTE_NODE) {
-    hostname = strdup((const char *)xml_node->children->content);
+    value = (const char *)xml_node->children->content;
   } else {
     ERROR(PLUGIN_NAME " plugin: xmlXPathEval(%s) unsupported node type %d",
           xpath_str, xml_node->type);
     goto metadata_end;
   }
 
-  if (hostname == NULL) {
-    ERROR(PLUGIN_NAME " plugin: strdup(%s) hostname failed", xpath_str);
+  if (value == NULL)
     goto metadata_end;
+
+  switch (field) {
+  case META_APPEND_HOST:
+    SSTRNCAT(vl->host, value, sizeof(vl->host));
+    break;
+  case META_APPEND_PLUGIN_INSTANCE:
+    SSTRNCAT(vl->plugin_instance, value, sizeof(vl->plugin_instance));
+    break;
   }
 
 metadata_end:
@@ -794,7 +821,6 @@ metadata_end:
   if (xml_doc)
     xmlFreeDoc(xml_doc);
   sfree(metadata_str);
-  return hostname;
 }
 
 static void init_value_list(value_list_t *vl, virDomainPtr dom) {
@@ -829,9 +855,7 @@ static void init_value_list(value_list_t *vl, virDomainPtr dom) {
         SSTRNCAT(vl->host, uuid, sizeof(vl->host));
       break;
     case hf_metadata:
-      name = metadata_get_hostname(dom);
-      if (name)
-        SSTRNCAT(vl->host, name, sizeof(vl->host));
+      set_field_from_metadata(vl, dom, META_APPEND_HOST);
       break;
     }
   }
@@ -857,13 +881,10 @@ static void init_value_list(value_list_t *vl, virDomainPtr dom) {
         SSTRNCAT(vl->plugin_instance, uuid, sizeof(vl->plugin_instance));
       break;
     case plginst_metadata:
-      name = metadata_get_hostname(dom);
-      if (name)
-        SSTRNCAT(vl->plugin_instance, name, sizeof(vl->plugin_instance));
+      set_field_from_metadata(vl, dom, META_APPEND_PLUGIN_INSTANCE);
       break;
     }
   }
-
 } /* void init_value_list */
 
 static int init_notif(notification_t *notif, const virDomainPtr domain,
@@ -916,13 +937,14 @@ static void memory_submit(virDomainPtr dom, gauge_t value) {
 
 static void memory_stats_submit(gauge_t value, virDomainPtr dom,
                                 int tag_index) {
-  static const char *tags[] = {"swap_in",        "swap_out", "major_fault",
-                               "minor_fault",    "unused",   "available",
-                               "actual_balloon", "rss",      "usable",
-                               "last_update"};
+  static const char *tags[] = {"swap_in",        "swap_out",   "major_fault",
+                               "minor_fault",    "unused",     "available",
+                               "actual_balloon", "rss",        "usable",
+                               "last_update",    "disk_caches"};
 
   if ((tag_index < 0) || (tag_index >= (int)STATIC_ARRAY_SIZE(tags))) {
-    ERROR("virt plugin: Array index out of bounds: tag_index = %d", tag_index);
+    ERROR(PLUGIN_NAME " plugin: Array index out of bounds: tag_index = %d",
+          tag_index);
     return;
   }
 
@@ -932,7 +954,8 @@ static void memory_stats_submit(gauge_t value, virDomainPtr dom,
 static void submit_derive2(const char *type, derive_t v0, derive_t v1,
                            virDomainPtr dom, const char *devname) {
   value_t values[] = {
-      {.derive = v0}, {.derive = v1},
+      {.derive = v0},
+      {.derive = v1},
   };
 
   submit(dom, type, devname, values, STATIC_ARRAY_SIZE(values));
@@ -952,7 +975,7 @@ static double cpu_ns_to_percent(unsigned int node_cpus,
   }
 
   DEBUG(PLUGIN_NAME " plugin: node_cpus=%u cpu_time_old=%" PRIu64
-                    " cpu_time_new=%" PRIu64 "cpu_time_diff=%" PRIu64
+                    " cpu_time_new=%" PRIu64 " cpu_time_diff=%" PRIu64
                     " time_diff_sec=%f percent=%f",
         node_cpus, (uint64_t)cpu_time_old, (uint64_t)cpu_time_new,
         (uint64_t)cpu_time_diff, time_diff_sec, percent);
@@ -984,7 +1007,7 @@ static void vcpu_submit(derive_t value, virDomainPtr dom, int vcpu_nr,
                         const char *type) {
   char type_instance[DATA_MAX_NAME_LEN];
 
-  snprintf(type_instance, sizeof(type_instance), "%d", vcpu_nr);
+  ssnprintf(type_instance, sizeof(type_instance), "%d", vcpu_nr);
   submit(dom, type, type_instance, &(value_t){.derive = value}, 1);
 }
 
@@ -1006,8 +1029,8 @@ static void disk_block_stats_submit(struct lv_block_stats *bstats,
   }
 
   char flush_type_instance[DATA_MAX_NAME_LEN];
-  snprintf(flush_type_instance, sizeof(flush_type_instance), "flush-%s",
-           type_instance);
+  ssnprintf(flush_type_instance, sizeof(flush_type_instance), "flush-%s",
+            type_instance);
 
   if ((bstats->bi.rd_req != -1) && (bstats->bi.wr_req != -1))
     submit_derive2("disk_ops", (derive_t)bstats->bi.rd_req,
@@ -1110,8 +1133,8 @@ static void domain_state_submit_notif(virDomainPtr dom, int state, int reason) {
   const char *reason_str = "N/A";
 #endif
 
-  snprintf(msg, sizeof(msg), "Domain state: %s. Reason: %s", state_str,
-           reason_str);
+  ssnprintf(msg, sizeof(msg), "Domain state: %s. Reason: %s", state_str,
+            reason_str);
 
   int severity;
   switch (state) {
@@ -1441,6 +1464,11 @@ static int lv_config(oconfig_item_t *ci) {
 
 static int lv_connect(void) {
   if (conn == NULL) {
+    /* event implementation must be registered before connection is opened */
+    if (!persistent_notification)
+      if (register_event_impl() != 0)
+        return -1;
+
 /* `conn_string == NULL' is acceptable */
 #ifdef HAVE_FS_INFO
     /* virDomainGetFSInfo requires full read-write access connection */
@@ -1458,8 +1486,17 @@ static int lv_connect(void) {
     int status = virNodeGetInfo(conn, &nodeinfo);
     if (status != 0) {
       ERROR(PLUGIN_NAME " plugin: virNodeGetInfo failed");
+      virConnectClose(conn);
+      conn = NULL;
       return -1;
     }
+
+    if (!persistent_notification)
+      if (start_event_loop(&notif_thread) != 0) {
+        virConnectClose(conn);
+        conn = NULL;
+        return -1;
+      }
   }
   c_release(LOG_NOTICE, &conn_complain,
             PLUGIN_NAME " plugin: Connection established.");
@@ -1485,8 +1522,8 @@ static int lv_domain_block_stats(virDomainPtr dom, const char *path,
 
   virTypedParameterPtr params = calloc(nparams, sizeof(*params));
   if (params == NULL) {
-    ERROR("virt plugin: alloc(%i) for block=%s parameters failed.", nparams,
-          path);
+    ERROR(PLUGIN_NAME " plugin: alloc(%i) for block=%s parameters failed.",
+          nparams, path);
     return -1;
   }
 
@@ -1526,8 +1563,17 @@ static int get_perf_events(virDomainPtr domain) {
   int status =
       virDomainListGetStats(domain_array, VIR_DOMAIN_STATS_PERF, &stats, 0);
   if (status == -1) {
-    ERROR("virt plugin: virDomainListGetStats failed with status %i.", status);
-    return status;
+    ERROR(PLUGIN_NAME " plugin: virDomainListGetStats failed with status %i.",
+          status);
+
+    virErrorPtr err = virGetLastError();
+    if (err->code == VIR_ERR_NO_SUPPORT) {
+      ERROR(PLUGIN_NAME
+            " plugin: Disabled unsupported ExtraStats selector: perf");
+      extra_stats &= ~(ex_stats_perf);
+    }
+
+    return -1;
   }
 
   for (int i = 0; i < status; ++i)
@@ -1544,14 +1590,14 @@ static void vcpu_pin_submit(virDomainPtr dom, int max_cpus, int vcpu,
     char type_instance[DATA_MAX_NAME_LEN];
     bool is_set = VIR_CPU_USABLE(cpu_maps, cpu_map_len, vcpu, cpu);
 
-    snprintf(type_instance, sizeof(type_instance), "vcpu_%d-cpu_%d", vcpu, cpu);
+    ssnprintf(type_instance, sizeof(type_instance), "vcpu_%d-cpu_%d", vcpu,
+              cpu);
     submit(dom, "cpu_affinity", type_instance, &(value_t){.gauge = is_set}, 1);
   }
 }
 
 static int get_vcpu_stats(virDomainPtr domain, unsigned short nr_virt_cpu) {
   int max_cpus = VIR_NODEINFO_MAXCPUS(nodeinfo);
-  int cpu_map_len = VIR_CPU_MAPLEN(max_cpus);
 
   virVcpuInfoPtr vinfo = calloc(nr_virt_cpu, sizeof(*vinfo));
   if (vinfo == NULL) {
@@ -1559,11 +1605,17 @@ static int get_vcpu_stats(virDomainPtr domain, unsigned short nr_virt_cpu) {
     return -1;
   }
 
-  unsigned char *cpumaps = calloc(nr_virt_cpu, cpu_map_len);
-  if (cpumaps == NULL) {
-    ERROR(PLUGIN_NAME " plugin: calloc failed.");
-    sfree(vinfo);
-    return -1;
+  int cpu_map_len = 0;
+  unsigned char *cpumaps = NULL;
+  if (extra_stats & ex_stats_vcpupin) {
+    cpu_map_len = VIR_CPU_MAPLEN(max_cpus);
+    cpumaps = calloc(nr_virt_cpu, cpu_map_len);
+
+    if (cpumaps == NULL) {
+      ERROR(PLUGIN_NAME " plugin: calloc failed.");
+      sfree(vinfo);
+      return -1;
+    }
   }
 
   int status =
@@ -1571,13 +1623,26 @@ static int get_vcpu_stats(virDomainPtr domain, unsigned short nr_virt_cpu) {
   if (status < 0) {
     ERROR(PLUGIN_NAME " plugin: virDomainGetVcpus failed with status %i.",
           status);
+
+    virErrorPtr err = virGetLastError();
+    if (err->code == VIR_ERR_NO_SUPPORT) {
+      if (extra_stats & ex_stats_vcpu)
+        ERROR(PLUGIN_NAME
+              " plugin: Disabled unsupported ExtraStats selector: vcpu");
+      if (extra_stats & ex_stats_vcpupin)
+        ERROR(PLUGIN_NAME
+              " plugin: Disabled unsupported ExtraStats selector: vcpupin");
+      extra_stats &= ~(ex_stats_vcpu | ex_stats_vcpupin);
+    }
+
     sfree(cpumaps);
     sfree(vinfo);
-    return status;
+    return -1;
   }
 
   for (int i = 0; i < nr_virt_cpu; ++i) {
-    vcpu_submit(vinfo[i].cpuTime, domain, vinfo[i].number, "virt_vcpu");
+    if (extra_stats & ex_stats_vcpu)
+      vcpu_submit(vinfo[i].cpuTime, domain, vinfo[i].number, "virt_vcpu");
     if (extra_stats & ex_stats_vcpupin)
       vcpu_pin_submit(domain, max_cpus, i, cpumaps, cpu_map_len);
   }
@@ -1592,6 +1657,14 @@ static int get_pcpu_stats(virDomainPtr dom) {
   int nparams = virDomainGetCPUStats(dom, NULL, 0, -1, 1, 0);
   if (nparams < 0) {
     VIRT_ERROR(conn, "getting the CPU params count");
+
+    virErrorPtr err = virGetLastError();
+    if (err->code == VIR_ERR_NO_SUPPORT) {
+      ERROR(PLUGIN_NAME
+            " plugin: Disabled unsupported ExtraStats selector: pcpu");
+      extra_stats &= ~(ex_stats_pcpu);
+    }
+
     return -1;
   }
 
@@ -1631,16 +1704,7 @@ static int get_pcpu_stats(virDomainPtr dom) {
 #endif /* HAVE_CPU_STATS */
 
 #ifdef HAVE_DOM_REASON
-
-static void domain_state_submit(virDomainPtr dom, int state, int reason) {
-  value_t values[] = {
-      {.gauge = (gauge_t)state}, {.gauge = (gauge_t)reason},
-  };
-
-  submit(dom, "domain_state", NULL, values, STATIC_ARRAY_SIZE(values));
-}
-
-static int get_domain_state(virDomainPtr domain) {
+static int submit_domain_state(virDomainPtr domain) {
   int domain_state = 0;
   int domain_reason = 0;
 
@@ -1651,9 +1715,14 @@ static int get_domain_state(virDomainPtr domain) {
     return status;
   }
 
-  domain_state_submit(domain, domain_state, domain_reason);
+  value_t values[] = {
+      {.gauge = (gauge_t)domain_state},
+      {.gauge = (gauge_t)domain_reason},
+  };
 
-  return status;
+  submit(domain, "domain_state", NULL, values, STATIC_ARRAY_SIZE(values));
+
+  return 0;
 }
 
 #ifdef HAVE_LIST_ALL_DOMAINS
@@ -1668,8 +1737,7 @@ static int get_domain_state_notify(virDomainPtr domain) {
     return status;
   }
 
-  if (persistent_notification)
-    domain_state_submit_notif(domain, domain_state, domain_reason);
+  domain_state_submit_notif(domain, domain_state, domain_reason);
 
   return status;
 }
@@ -1680,21 +1748,64 @@ static int get_memory_stats(virDomainPtr domain) {
   virDomainMemoryStatPtr minfo =
       calloc(VIR_DOMAIN_MEMORY_STAT_NR, sizeof(*minfo));
   if (minfo == NULL) {
-    ERROR("virt plugin: calloc failed.");
+    ERROR(PLUGIN_NAME " plugin: calloc failed.");
     return -1;
   }
 
   int mem_stats =
       virDomainMemoryStats(domain, minfo, VIR_DOMAIN_MEMORY_STAT_NR, 0);
   if (mem_stats < 0) {
-    ERROR("virt plugin: virDomainMemoryStats failed with mem_stats %i.",
+    ERROR(PLUGIN_NAME " plugin: virDomainMemoryStats failed with mem_stats %i.",
           mem_stats);
     sfree(minfo);
-    return mem_stats;
+
+    virErrorPtr err = virGetLastError();
+    if (err->code == VIR_ERR_NO_SUPPORT) {
+      ERROR(PLUGIN_NAME
+            " plugin: Disabled unsupported ExtraStats selector: memory");
+      extra_stats &= ~(ex_stats_memory);
+    }
+
+    return -1;
   }
 
-  for (int i = 0; i < mem_stats; i++)
-    memory_stats_submit((gauge_t)minfo[i].val * 1024, domain, minfo[i].tag);
+  derive_t swap_in = -1;
+  derive_t swap_out = -1;
+  derive_t min_flt = -1;
+  derive_t maj_flt = -1;
+
+  for (int i = 0; i < mem_stats; i++) {
+    if (minfo[i].tag == VIR_DOMAIN_MEMORY_STAT_SWAP_IN)
+      swap_in = minfo[i].val;
+    else if (minfo[i].tag == VIR_DOMAIN_MEMORY_STAT_SWAP_OUT)
+      swap_out = minfo[i].val;
+    else if (minfo[i].tag == VIR_DOMAIN_MEMORY_STAT_MINOR_FAULT)
+      min_flt = minfo[i].val;
+    else if (minfo[i].tag == VIR_DOMAIN_MEMORY_STAT_MAJOR_FAULT)
+      maj_flt = minfo[i].val;
+#ifdef LIBVIR_CHECK_VERSION
+#if LIBVIR_CHECK_VERSION(2, 1, 0)
+    else if (minfo[i].tag == VIR_DOMAIN_MEMORY_STAT_LAST_UPDATE)
+      /* Skip 'last_update' reporting as that is not memory but timestamp */
+      continue;
+#endif
+#endif
+    else
+      memory_stats_submit((gauge_t)minfo[i].val * 1024, domain, minfo[i].tag);
+  }
+
+  if (swap_in > 0 || swap_out > 0) {
+    submit(domain, "swap_io", "in", &(value_t){.gauge = swap_in}, 1);
+    submit(domain, "swap_io", "out", &(value_t){.gauge = swap_out}, 1);
+  }
+
+  if (min_flt > 0 || maj_flt > 0) {
+    value_t values[] = {
+        {.gauge = (gauge_t)min_flt},
+        {.gauge = (gauge_t)maj_flt},
+    };
+    submit(domain, "ps_pagefaults", NULL, values, STATIC_ARRAY_SIZE(values));
+  }
 
   sfree(minfo);
   return 0;
@@ -1713,6 +1824,15 @@ static int get_disk_err(virDomainPtr domain) {
   if (disk_err_count == -1) {
     ERROR(PLUGIN_NAME
           " plugin: failed to get preferred size of disk errors array");
+
+    virErrorPtr err = virGetLastError();
+
+    if (err->code == VIR_ERR_NO_SUPPORT) {
+      ERROR(PLUGIN_NAME
+            " plugin: Disabled unsupported ExtraStats selector: disk_err");
+      extra_stats &= ~(ex_stats_disk_err);
+    }
+
     return -1;
   }
 
@@ -1759,6 +1879,24 @@ static int get_block_device_stats(struct block_device *block_dev) {
           0) {
         ERROR(PLUGIN_NAME " plugin: virDomainGetBlockInfo failed for path: %s",
               block_dev->path);
+
+        virErrorPtr err = virGetLastError();
+        if (err->code == VIR_ERR_NO_SUPPORT) {
+
+          if (extra_stats & ex_stats_disk_allocation)
+            ERROR(PLUGIN_NAME " plugin: Disabled unsupported ExtraStats "
+                              "selector: disk_allocation");
+          if (extra_stats & ex_stats_disk_capacity)
+            ERROR(PLUGIN_NAME " plugin: Disabled unsupported ExtraStats "
+                              "selector: disk_capacity");
+          if (extra_stats & ex_stats_disk_physical)
+            ERROR(PLUGIN_NAME " plugin: Disabled unsupported ExtraStats "
+                              "selector: disk_physical");
+
+          extra_stats &= ~(ex_stats_disk_allocation | ex_stats_disk_capacity |
+                           ex_stats_disk_physical);
+        }
+
         return -1;
       }
     }
@@ -1845,7 +1983,15 @@ static int get_fs_info(virDomainPtr domain) {
   if (mount_points_cnt == -1) {
     ERROR(PLUGIN_NAME " plugin: virDomainGetFSInfo failed: %d",
           mount_points_cnt);
-    return mount_points_cnt;
+
+    virErrorPtr err = virGetLastError();
+    if (err->code == VIR_ERR_NO_SUPPORT) {
+      ERROR(PLUGIN_NAME
+            " plugin: Disabled unsupported ExtraStats selector: fs_info");
+      extra_stats &= ~(ex_stats_fs_info);
+    }
+
+    return -1;
   }
 
   for (int i = 0; i < mount_points_cnt; ++i) {
@@ -1892,7 +2038,6 @@ static void job_stats_submit(virDomainPtr domain, virTypedParameterPtr param) {
 }
 
 static int get_job_stats(virDomainPtr domain) {
-  int ret = 0;
   int job_type = 0;
   int nparams = 0;
   virTypedParameterPtr params = NULL;
@@ -1900,10 +2045,24 @@ static int get_job_stats(virDomainPtr domain) {
                   ? VIR_DOMAIN_JOB_STATS_COMPLETED
                   : 0;
 
-  ret = virDomainGetJobStats(domain, &job_type, &params, &nparams, flags);
+  int ret = virDomainGetJobStats(domain, &job_type, &params, &nparams, flags);
   if (ret != 0) {
     ERROR(PLUGIN_NAME " plugin: virDomainGetJobStats failed: %d", ret);
-    return ret;
+
+    virErrorPtr err = virGetLastError();
+    // VIR_ERR_INVALID_ARG returned when VIR_DOMAIN_JOB_STATS_COMPLETED flag is
+    // not supported by driver
+    if (err->code == VIR_ERR_NO_SUPPORT || err->code == VIR_ERR_INVALID_ARG) {
+      if (extra_stats & ex_stats_job_stats_completed)
+        ERROR(PLUGIN_NAME " plugin: Disabled unsupported ExtraStats selector: "
+                          "job_stats_completed");
+      if (extra_stats & ex_stats_job_stats_background)
+        ERROR(PLUGIN_NAME " plugin: Disabled unsupported ExtraStats selector: "
+                          "job_stats_background");
+      extra_stats &=
+          ~(ex_stats_job_stats_completed | ex_stats_job_stats_background);
+    }
+    return -1;
   }
 
   DEBUG(PLUGIN_NAME " plugin: job_type=%d nparams=%d", job_type, nparams);
@@ -1915,7 +2074,7 @@ static int get_job_stats(virDomainPtr domain) {
   }
 
   virTypedParamsFree(params, nparams);
-  return ret;
+  return 0;
 }
 #endif /* HAVE_JOB_STATS */
 
@@ -1939,7 +2098,7 @@ static int get_domain_metrics(domain_t *domain) {
      * however it doesn't provide a reason for entering particular state.
      * We need to get it from virDomainGetState.
      */
-    GET_STATS(get_domain_state, "domain reason", domain->ptr);
+    GET_STATS(submit_domain_state, "domain reason", domain->ptr);
 #endif
   }
 
@@ -1956,8 +2115,10 @@ static int get_domain_metrics(domain_t *domain) {
 
   memory_submit(domain->ptr, (gauge_t)info.memory * 1024);
 
-  GET_STATS(get_vcpu_stats, "vcpu stats", domain->ptr, info.nrVirtCpu);
-  GET_STATS(get_memory_stats, "memory stats", domain->ptr);
+  if (extra_stats & (ex_stats_vcpu | ex_stats_vcpupin))
+    GET_STATS(get_vcpu_stats, "vcpu stats", domain->ptr, info.nrVirtCpu);
+  if (extra_stats & ex_stats_memory)
+    GET_STATS(get_memory_stats, "memory stats", domain->ptr);
 
 #ifdef HAVE_PERF_STATS
   if (extra_stats & ex_stats_perf)
@@ -2044,11 +2205,22 @@ static int domain_lifecycle_event_cb(__attribute__((unused)) virConnectPtr con_,
   return 0;
 }
 
+static void virt_eventloop_timeout_cb(int timer ATTRIBUTE_UNUSED,
+                                      void *timer_info) {}
+
 static int register_event_impl(void) {
   if (virEventRegisterDefaultImpl() < 0) {
     virErrorPtr err = virGetLastError();
     ERROR(PLUGIN_NAME
           " plugin: error while event implementation registering: %s",
+          err && err->message ? err->message : "Unknown error");
+    return -1;
+  }
+
+  if (virEventAddTimeout(CDTIME_T_TO_MS(plugin_get_interval()),
+                         virt_eventloop_timeout_cb, NULL, NULL) < 0) {
+    virErrorPtr err = virGetLastError();
+    ERROR(PLUGIN_NAME " plugin: virEventAddTimeout failed: %s",
           err && err->message ? err->message : "Unknown error");
     return -1;
   }
@@ -2091,10 +2263,9 @@ static void *event_loop_worker(void *arg) {
 }
 
 static int virt_notif_thread_init(virt_notif_thread_t *thread_data) {
-  int ret;
-
   assert(thread_data != NULL);
-  ret = pthread_mutex_init(&thread_data->active_mutex, NULL);
+
+  int ret = pthread_mutex_init(&thread_data->active_mutex, NULL);
   if (ret != 0) {
     ERROR(PLUGIN_NAME " plugin: Failed to initialize mutex, err %u", ret);
     return ret;
@@ -2230,33 +2401,41 @@ static int persistent_domains_state_notification(void) {
 }
 
 static int lv_read(user_data_t *ud) {
-  time_t t;
-  struct lv_read_instance *inst = NULL;
-  struct lv_read_state *state = NULL;
-
   if (ud->data == NULL) {
     ERROR(PLUGIN_NAME " plugin: NULL userdata");
     return -1;
   }
 
-  inst = ud->data;
-  state = &inst->read_state;
+  struct lv_read_instance *inst = ud->data;
+  struct lv_read_state *state = &inst->read_state;
 
-  bool reconnect = conn == NULL ? true : false;
-  /* event implementation must be registered before connection is opened */
-  if (inst->id == 0) {
-    if (!persistent_notification && reconnect)
-      if (register_event_impl() != 0)
-        return -1;
-
+  if (inst->id == 0)
     if (lv_connect() < 0)
       return -1;
 
-    if (!persistent_notification && reconnect && conn != NULL)
-      if (start_event_loop(&notif_thread) != 0)
-        return -1;
+  /* Wait until inst#0 establish connection */
+  if (conn == NULL) {
+    DEBUG(PLUGIN_NAME " plugin#%s: Wait until inst#0 establish connection",
+          inst->tag);
+    return 0;
   }
 
+  int ret = virConnectIsAlive(conn);
+  if (ret == 0) { /* Connection lost */
+    if (inst->id == 0) {
+      c_complain(LOG_ERR, &conn_complain,
+                 PLUGIN_NAME " plugin: Lost connection.");
+
+      if (!persistent_notification)
+        stop_event_loop(&notif_thread);
+
+      lv_disconnect();
+      last_refresh = 0;
+    }
+    return -1;
+  }
+
+  time_t t;
   time(&t);
 
   /* Need to refresh domain or device lists? */
@@ -2303,8 +2482,8 @@ static int lv_read(user_data_t *ud) {
     if (dom->active)
       status = get_domain_metrics(dom);
 #ifdef HAVE_DOM_REASON
-    else
-      status = get_domain_state(dom->ptr);
+    else if (extra_stats & ex_stats_domain_state)
+      status = submit_domain_state(dom->ptr);
 #endif
 
     if (status != 0)
@@ -2342,7 +2521,7 @@ static int lv_init_instance(size_t i, plugin_read_cb callback) {
 
   memset(lv_ud, 0, sizeof(*lv_ud));
 
-  snprintf(inst->tag, sizeof(inst->tag), "%s-%" PRIsz, PLUGIN_NAME, i);
+  ssnprintf(inst->tag, sizeof(inst->tag), "%s-%" PRIsz, PLUGIN_NAME, i);
   inst->id = i;
 
   user_data_t *ud = &(lv_ud->ud);
@@ -2377,19 +2556,11 @@ static int lv_init(void) {
   if (lv_init_ignorelists() != 0)
     return -1;
 
-  /* event implementation must be registered before connection is opened */
   if (!persistent_notification)
-    if (register_event_impl() != 0)
+    if (virt_notif_thread_init(&notif_thread) != 0)
       return -1;
 
-  if (lv_connect() != 0)
-    return -1;
-
-  if (!persistent_notification) {
-    virt_notif_thread_init(&notif_thread);
-    if (start_event_loop(&notif_thread) != 0)
-      return -1;
-  }
+  lv_connect();
 
   DEBUG(PLUGIN_NAME " plugin: starting %i instances", nr_instances);
 
@@ -2420,8 +2591,8 @@ static int lv_domain_get_tag(xmlXPathContextPtr xpath_ctx, const char *dom_name,
     goto done;
   }
 
-  snprintf(xpath_str, sizeof(xpath_str), "/domain/metadata/%s:%s/text()",
-           METADATA_VM_PARTITION_PREFIX, METADATA_VM_PARTITION_ELEMENT);
+  ssnprintf(xpath_str, sizeof(xpath_str), "/domain/metadata/%s:%s/text()",
+            METADATA_VM_PARTITION_PREFIX, METADATA_VM_PARTITION_ELEMENT);
   xpath_obj = xmlXPathEvalExpression((xmlChar *)xpath_str, xpath_ctx);
   if (xpath_obj == NULL) {
     ERROR(PLUGIN_NAME " plugin: xmlXPathEval(%s) failed on domain %s",
@@ -2623,7 +2794,7 @@ static void lv_add_network_interfaces(struct lv_read_state *state,
       break;
     case if_number: {
       char number_string[4];
-      snprintf(number_string, sizeof(number_string), "%d", itf_number);
+      ssnprintf(number_string, sizeof(number_string), "%d", itf_number);
       if (ignore_device_match(il_interface_devices, domname, number_string) !=
           0)
         device_ignored = true;
@@ -2924,7 +3095,7 @@ static int add_interface_device(struct lv_read_state *state, virDomainPtr dom,
   }
 
   char number_string[21];
-  snprintf(number_string, sizeof(number_string), "interface-%u", number);
+  ssnprintf(number_string, sizeof(number_string), "interface-%u", number);
   char *number_copy = strdup(number_string);
   if (!number_copy) {
     sfree(path_copy);
@@ -2963,7 +3134,7 @@ static int ignore_device_match(ignorelist_t *il, const char *domname,
     ERROR(PLUGIN_NAME " plugin: malloc failed.");
     return 0;
   }
-  snprintf(name, n, "%s:%s", domname, devpath);
+  ssnprintf(name, n, "%s:%s", domname, devpath);
   int r = ignorelist_match(il, name);
   sfree(name);
   return r;
